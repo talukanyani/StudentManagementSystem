@@ -22,6 +22,7 @@ import javax.swing.DefaultComboBoxModel;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JFrame;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -38,6 +39,49 @@ import javax.swing.AbstractCellEditor;
 public class MainFrame extends JFrame {
 
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(MainFrame.class.getName());
+    private static final Pattern NAME_PATTERN = Pattern.compile("^[\\p{L}][\\p{L} .'-]{0,49}$");
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
+    private static final Pattern PHONE_PATTERN = Pattern.compile("^\\+?[0-9][0-9 ()-]{6,18}$");
+    private static final String[] PROGRAMMES = {
+"BSc in Agricultural and Biosystems Engineering",
+"BSc in Agriculture (Agribusiness Management)",
+"BSc in Agriculture (Agricultural Economics)",
+"BSc in Agriculture (Animal Science)",
+"BSc in Agriculture (Horticultural Sciences)",
+"BSc in Agriculture (Plant Production)",
+"BSc in Biochemistry and Biology",
+"BSc in Biochemistry and Microbiology",
+"BSc in Botany and Zoology",
+"BSc in Chemistry",
+"BSc in Chemistry and Biochemistry",
+"BSc in Chemistry and Mathematics",
+"BSc in Computer Science",
+"BSc in Computer Science and Mathematics",
+"BSc in Forestry",
+"BSc in Mathematics and Applied Mathematics",
+"BSc in Mathematics and Physics",
+"BSc in Mathematics and Statistics",
+"BSc in Microbiology and Botany",
+"BSc in Physics and Chemistry",
+"BSc in Soil Science",
+"Bachelor of Earth Sciences in Hydrology and Water Resources",
+"Bachelor of Earth Sciences in Mining and Environmental Geology",
+"Bachelor of Environmental Sciences",
+"Bachelor of Environmental Sciences in Disaster Risk Reduction",
+"Bachelor of Urban and Regional Planning",
+"Extended BSc in Biochemistry and Biology",
+"Extended BSc in Biochemistry and Microbiology",
+"Extended BSc in Botany and Zoology",
+"Extended BSc in Chemistry and Applied Chemistry",
+"Extended BSc in Chemistry and Biochemistry",
+"Extended BSc in Chemistry and Mathematics",
+"Extended BSc in Computer Science",
+"Extended BSc in Mathematics and Applied Mathematics",
+"Extended BSc in Mathematics and Physics",
+"Extended BSc in Mathematics and Statistics",
+"Extended BSc in Microbiology and Botany",
+"Extended BSc in Physics and Chemistry"
+    };
 
     private final StudentStore studentStore = new StudentStore();
     private final AdminStore adminStore = new AdminStore();
@@ -101,7 +145,7 @@ public class MainFrame extends JFrame {
         JLabel title = new JLabel("WELCOME", JLabel.CENTER);
         title.setFont(new Font("Segoe UI", Font.BOLD, 48));
 
-        JLabel subtitle = new JLabel("Welcome to Faculity of Science and Mathematics Student Management System.", JLabel.CENTER);
+        JLabel subtitle = new JLabel("Welcome to the Faculty of Science, Engineering and Agriculture Student Management System.", JLabel.CENTER);
         subtitle.setFont(new Font("Segoe UI", Font.PLAIN, 24));
 
         JLabel instructions = new JLabel("Use the tabs above to navigate.", JLabel.CENTER);
@@ -169,7 +213,7 @@ public class MainFrame extends JFrame {
         gbc.gridx = 1;
         gbc.gridy = 2;
         gbc.gridwidth = 2;
-        genderCombo = new JComboBox<>(new DefaultComboBoxModel<>(new String[]{"Male", "Female", "Other"}));
+        genderCombo = new JComboBox<>(new DefaultComboBoxModel<>(new String[]{"Male", "Female"}));
         genderCombo.setPreferredSize(new Dimension(250, 38));
         formPanel.add(genderCombo, gbc);
 
@@ -203,15 +247,7 @@ public class MainFrame extends JFrame {
         gbc.gridx = 1;
         gbc.gridy = 5;
         gbc.gridwidth = 2;
-        programCombo = new JComboBox<>(new DefaultComboBoxModel<>(new String[]{
-                "BSc Computer Science",
-                "BSc Computer Science and Mathematics",
-                "BSc Mathematics and Statistics",
-                "BA Youth Development",
-                "BEd Foundation Phase",
-                "BNurs Nursing",
-                "BCom Accounting"
-        }));
+        programCombo = new JComboBox<>(new DefaultComboBoxModel<>(PROGRAMMES));
         programCombo.setPreferredSize(new Dimension(250, 38));
         formPanel.add(programCombo, gbc);
 
@@ -328,18 +364,7 @@ public class MainFrame extends JFrame {
         gbc.gridx = 1;
         gbc.gridy = 3;
         gbc.gridwidth = 2;
-        searchProgramCombo = new JComboBox<>(new DefaultComboBoxModel<>(new String[]{
-                "", 
-                "BSc Computer Science",
-                "BSc Computer Science and Mathematics",
-                "BSc Mathematics and Statistics",
-                "BSc Physics",
-                "BSc Chemistry",
-                "BSc Physics and Chemistry",
-                "BSc Physics and Mathematics",
-                "BSc Chemistry and Applied Mathemtics",
-                
-        }));
+        searchProgramCombo = new JComboBox<>(new DefaultComboBoxModel<>(getSearchProgrammes()));
         searchProgramCombo.setPreferredSize(new Dimension(250, 38));
         searchPanel.add(searchProgramCombo, gbc);
 
@@ -370,7 +395,12 @@ public class MainFrame extends JFrame {
 
         searchResultsTableModel = new DefaultTableModel(
                 new Object[]{"Student Number", "First Name", "Last Name", "Gender", "Email", "Phone Number", "Program"},
-                0);
+                0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
         searchResultsTable = new JTable(searchResultsTableModel);
         searchResultsTable.setRowHeight(32);
         searchResultsTable.setFont(new Font("Segoe UI", Font.PLAIN, 14));
@@ -505,7 +535,9 @@ public class MainFrame extends JFrame {
 
         if (choice == JOptionPane.YES_OPTION) {
             dispose();
-            System.exit(0);
+            LoginFrame loginFrame = new LoginFrame();
+            loginFrame.setLocationRelativeTo(null);
+            loginFrame.setVisible(true);
         }
     }
 
@@ -515,9 +547,7 @@ public class MainFrame extends JFrame {
         String email = emailField.getText().trim();
         String phoneNumber = phoneField.getText().trim();
 
-        if (firstName.isEmpty() || lastName.isEmpty() || email.isEmpty() || phoneNumber.isEmpty()) {
-            statusLabel.setText("Please fill in all required fields.");
-            statusLabel.setForeground(Color.RED);
+        if (!validateStudentInput(firstName, lastName, email, phoneNumber)) {
             return;
         }
 
@@ -556,6 +586,41 @@ public class MainFrame extends JFrame {
         programCombo.setSelectedIndex(0);
         saveButton.setText("Add Student");
         editingStudentIndex = -1;
+    }
+
+    private boolean validateStudentInput(String firstName, String lastName, String email, String phoneNumber) {
+        if (!NAME_PATTERN.matcher(firstName).matches()) {
+            showValidationError("Enter a valid first name (letters, spaces, apostrophes and hyphens only).", firstNameField);
+            return false;
+        }
+        if (!NAME_PATTERN.matcher(lastName).matches()) {
+            showValidationError("Enter a valid last name (letters, spaces, apostrophes and hyphens only).", lastNameField);
+            return false;
+        }
+        if (email.length() > 254 || !EMAIL_PATTERN.matcher(email).matches()) {
+            showValidationError("Enter a valid email address.", emailField);
+            return false;
+        }
+
+        String digitsOnly = phoneNumber.replaceAll("\\D", "");
+        if (!PHONE_PATTERN.matcher(phoneNumber).matches() || digitsOnly.length() < 10 || digitsOnly.length() > 15) {
+            showValidationError("Enter a valid phone number with 10 to 15 digits.", phoneField);
+            return false;
+        }
+        return true;
+    }
+
+    private void showValidationError(String message, JComponent field) {
+        statusLabel.setText(message);
+        statusLabel.setForeground(Color.RED);
+        field.requestFocusInWindow();
+    }
+
+    private String[] getSearchProgrammes() {
+        String[] searchProgrammes = new String[PROGRAMMES.length + 1];
+        searchProgrammes[0] = "";
+        System.arraycopy(PROGRAMMES, 0, searchProgrammes, 1, PROGRAMMES.length);
+        return searchProgrammes;
     }
 
     private String generateStudentNumber() {
