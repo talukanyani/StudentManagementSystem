@@ -4,6 +4,7 @@
 package com.groupf.studentmanagementsystem;
 
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -17,12 +18,14 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import javax.swing.AbstractCellEditor;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
-import javax.swing.JFrame;
 import javax.swing.JComponent;
+import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -34,7 +37,6 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableCellEditor;
 import javax.swing.table.TableCellRenderer;
-import javax.swing.AbstractCellEditor;
 
 public class MainFrame extends JFrame {
 
@@ -42,50 +44,11 @@ public class MainFrame extends JFrame {
     private static final Pattern NAME_PATTERN = Pattern.compile("^[\\p{L}][\\p{L} .'-]{0,49}$");
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
     private static final Pattern PHONE_PATTERN = Pattern.compile("^\\+?[0-9][0-9 ()-]{6,18}$");
-    private static final String[] PROGRAMMES = {
-"BSc in Agricultural and Biosystems Engineering",
-"BSc in Agriculture (Agribusiness Management)",
-"BSc in Agriculture (Agricultural Economics)",
-"BSc in Agriculture (Animal Science)",
-"BSc in Agriculture (Horticultural Sciences)",
-"BSc in Agriculture (Plant Production)",
-"BSc in Biochemistry and Biology",
-"BSc in Biochemistry and Microbiology",
-"BSc in Botany and Zoology",
-"BSc in Chemistry",
-"BSc in Chemistry and Biochemistry",
-"BSc in Chemistry and Mathematics",
-"BSc in Computer Science",
-"BSc in Computer Science and Mathematics",
-"BSc in Forestry",
-"BSc in Mathematics and Applied Mathematics",
-"BSc in Mathematics and Physics",
-"BSc in Mathematics and Statistics",
-"BSc in Microbiology and Botany",
-"BSc in Physics and Chemistry",
-"BSc in Soil Science",
-"Bachelor of Earth Sciences in Hydrology and Water Resources",
-"Bachelor of Earth Sciences in Mining and Environmental Geology",
-"Bachelor of Environmental Sciences",
-"Bachelor of Environmental Sciences in Disaster Risk Reduction",
-"Bachelor of Urban and Regional Planning",
-"Extended BSc in Biochemistry and Biology",
-"Extended BSc in Biochemistry and Microbiology",
-"Extended BSc in Botany and Zoology",
-"Extended BSc in Chemistry and Applied Chemistry",
-"Extended BSc in Chemistry and Biochemistry",
-"Extended BSc in Chemistry and Mathematics",
-"Extended BSc in Computer Science",
-"Extended BSc in Mathematics and Applied Mathematics",
-"Extended BSc in Mathematics and Physics",
-"Extended BSc in Mathematics and Statistics",
-"Extended BSc in Microbiology and Botany",
-"Extended BSc in Physics and Chemistry"
-    };
-
-    private final StudentStore studentStore = new StudentStore();
-    private final AdminStore adminStore = new AdminStore();
-    private Admin currentAdmin;
+    private final StudentDAO studentDAO = new StudentDAO();
+    private final AdminDAO adminDAO = new AdminDAO();
+    private final ProgramDAO programDAO = new ProgramDAO();
+    private final Admin currentAdmin;
+    private List<String> programmes;
     private JTabbedPane tabbedPane;
     private JTextField firstNameField;
     private JTextField lastNameField;
@@ -97,6 +60,8 @@ public class MainFrame extends JFrame {
     private JLabel statusLabel;
     private JTable studentsTable;
     private DefaultTableModel studentsTableModel;
+    private CardLayout studentsViewLayout;
+    private JPanel studentsContentPanel;
 
     private JTextField searchStudentNumberField;
     private JTextField searchFirstNameField;
@@ -109,16 +74,17 @@ public class MainFrame extends JFrame {
     private int editingStudentIndex = -1;
 
     public MainFrame() {
-        currentAdmin = adminStore.getDefaultAdmin();
+        currentAdmin = adminDAO.getDefaultAdmin();
         initComponents();
     }
 
     public MainFrame(Admin admin) {
-        currentAdmin = admin != null ? admin : adminStore.getDefaultAdmin();
+        currentAdmin = admin != null ? admin : adminDAO.getDefaultAdmin();
         initComponents();
     }
 
     private void initComponents() {
+        programmes = programDAO.getPrograms();
         setTitle("Student Management System");
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
         setSize(1100, 750);
@@ -214,6 +180,7 @@ public class MainFrame extends JFrame {
         gbc.gridy = 2;
         gbc.gridwidth = 2;
         genderCombo = new JComboBox<>(new DefaultComboBoxModel<>(new String[]{"Male", "Female"}));
+        genderCombo.setSelectedIndex(-1);
         genderCombo.setPreferredSize(new Dimension(250, 38));
         formPanel.add(genderCombo, gbc);
 
@@ -247,7 +214,8 @@ public class MainFrame extends JFrame {
         gbc.gridx = 1;
         gbc.gridy = 5;
         gbc.gridwidth = 2;
-        programCombo = new JComboBox<>(new DefaultComboBoxModel<>(PROGRAMMES));
+        programCombo = new JComboBox<>(new DefaultComboBoxModel<>(programmes.toArray(String[]::new)));
+        programCombo.setSelectedIndex(-1);
         programCombo.setPreferredSize(new Dimension(250, 38));
         formPanel.add(programCombo, gbc);
 
@@ -304,7 +272,16 @@ public class MainFrame extends JFrame {
         studentsTable.getColumnModel().getColumn(7).setCellEditor(new ActionsCell());
 
         JScrollPane scrollPane = new JScrollPane(studentsTable);
-        panel.add(scrollPane, BorderLayout.CENTER);
+        studentsViewLayout = new CardLayout();
+        studentsContentPanel = new JPanel(studentsViewLayout);
+        studentsContentPanel.add(scrollPane, "TABLE");
+
+        JLabel noStudentsLabel = new JLabel("No students to display.", JLabel.CENTER);
+        noStudentsLabel.setFont(new Font("Segoe UI", Font.PLAIN, 18));
+        noStudentsLabel.setForeground(Color.GRAY);
+        studentsContentPanel.add(noStudentsLabel, "EMPTY");
+
+        panel.add(studentsContentPanel, BorderLayout.CENTER);
         return panel;
     }
 
@@ -420,7 +397,21 @@ public class MainFrame extends JFrame {
         String lastName = searchLastNameField.getText().trim().toLowerCase();
         String program = searchProgramCombo.getSelectedItem() == null ? "" : searchProgramCombo.getSelectedItem().toString().trim().toLowerCase();
 
-        List<Student> students = studentStore.getStudents();
+        if (studentNumber.isEmpty() && firstName.isEmpty() && lastName.isEmpty() && program.isEmpty()) {
+            searchStatusLabel.setText("Enter at least one search criterion.");
+            searchStatusLabel.setForeground(Color.RED);
+            refreshSearchResults(java.util.Collections.emptyList());
+            searchStudentNumberField.requestFocusInWindow();
+            return;
+        }
+
+        List<Student> students;
+        try {
+            students = studentDAO.getStudents();
+        } catch (DatabaseException exception) {
+            showDatabaseError(exception);
+            return;
+        }
         List<Student> filtered = new java.util.ArrayList<>();
 
         for (Student student : students) {
@@ -468,13 +459,13 @@ public class MainFrame extends JFrame {
         searchResultsTableModel.setRowCount(0);
         for (Student student : students) {
             searchResultsTableModel.addRow(new Object[]{
-                    student.getStudentNumber(),
-                    student.getFirstName(),
-                    student.getLastName(),
-                    student.getGender(),
-                    student.getEmail(),
-                    student.getPhoneNumber(),
-                    student.getProgram()
+                student.getStudentNumber(),
+                student.getFirstName(),
+                student.getLastName(),
+                student.getGender(),
+                student.getEmail(),
+                student.getPhoneNumber(),
+                student.getProgram()
             });
         }
     }
@@ -559,31 +550,41 @@ public class MainFrame extends JFrame {
         student.setPhoneNumber(phoneNumber);
         student.setProgram(programCombo.getSelectedItem().toString());
 
-        if (editingStudentIndex >= 0) {
-            Student current = studentStore.getStudents().get(editingStudentIndex);
-            student.setStudentNumber(current.getStudentNumber());
-            studentStore.updateStudent(editingStudentIndex, student);
-            statusLabel.setText("Student updated successfully.");
-            saveButton.setText("Add Student");
-            editingStudentIndex = -1;
-        } else {
-            student.setStudentNumber(generateStudentNumber());
-            studentStore.addStudent(student);
-            statusLabel.setText("Student added successfully.");
-        }
+        try {
+            if (editingStudentIndex >= 0) {
+                Student current = studentDAO.getStudents().get(editingStudentIndex);
+                student.setStudentNumber(current.getStudentNumber());
+                studentDAO.updateStudent(current.getStudentNumber(), student);
+                statusLabel.setText("Student updated successfully.");
+                saveButton.setText("Add Student");
+                editingStudentIndex = -1;
+            } else {
+                String studentNumber = generateStudentNumber();
+                if (studentNumber == null) {
+                    statusLabel.setText("Cannot add more than 1,000 students per day.");
+                    statusLabel.setForeground(Color.RED);
+                    return;
+                }
+                student.setStudentNumber(studentNumber);
+                studentDAO.addStudent(student);
+                statusLabel.setText("Student added successfully.");
+            }
 
-        refreshStudentTable();
-        clearForm();
-        statusLabel.setForeground(new Color(22, 119, 22));
+            refreshStudentTable();
+            clearForm();
+            statusLabel.setForeground(new Color(22, 119, 22));
+        } catch (DatabaseException | IndexOutOfBoundsException exception) {
+            showDatabaseError(exception);
+        }
     }
 
     private void clearForm() {
         firstNameField.setText("");
         lastNameField.setText("");
-        genderCombo.setSelectedIndex(0);
+        genderCombo.setSelectedIndex(-1);
         emailField.setText("");
         phoneField.setText("");
-        programCombo.setSelectedIndex(0);
+        programCombo.setSelectedIndex(-1);
         saveButton.setText("Add Student");
         editingStudentIndex = -1;
     }
@@ -607,6 +608,14 @@ public class MainFrame extends JFrame {
             showValidationError("Enter a valid phone number with 10 to 15 digits.", phoneField);
             return false;
         }
+        if (genderCombo.getSelectedItem() == null) {
+            showValidationError("Select a gender.", genderCombo);
+            return false;
+        }
+        if (programCombo.getSelectedItem() == null) {
+            showValidationError("Select a programme.", programCombo);
+            return false;
+        }
         return true;
     }
 
@@ -617,23 +626,27 @@ public class MainFrame extends JFrame {
     }
 
     private String[] getSearchProgrammes() {
-        String[] searchProgrammes = new String[PROGRAMMES.length + 1];
+        String[] searchProgrammes = new String[programmes.size() + 1];
         searchProgrammes[0] = "";
-        System.arraycopy(PROGRAMMES, 0, searchProgrammes, 1, PROGRAMMES.length);
+        for (int index = 0; index < programmes.size(); index++) {
+            searchProgrammes[index + 1] = programmes.get(index);
+        }
         return searchProgrammes;
     }
 
     private String generateStudentNumber() {
         String todayPrefix = LocalDate.now().format(DateTimeFormatter.ofPattern("yyMMdd"));
-        Pattern pattern = Pattern.compile("^(\\d{6})(\\d{2})$");
-        int highestSuffix = 0;
+        Pattern pattern = Pattern.compile("^(\\d{6})(\\d{3})$");
+        boolean[] usedSuffixes = new boolean[1000];
+        int highestSuffix = -1;
 
-        for (Student student : studentStore.getStudents()) {
+        for (Student student : studentDAO.getStudents()) {
             String studentNumber = student.getStudentNumber();
             if (studentNumber != null) {
                 Matcher matcher = pattern.matcher(studentNumber);
                 if (matcher.matches() && matcher.group(1).equals(todayPrefix)) {
                     int suffix = Integer.parseInt(matcher.group(2));
+                    usedSuffixes[suffix] = true;
                     if (suffix > highestSuffix) {
                         highestSuffix = suffix;
                     }
@@ -642,14 +655,25 @@ public class MainFrame extends JFrame {
         }
 
         int nextSuffix = highestSuffix + 1;
-        return String.format("%s%02d", todayPrefix, nextSuffix);
+        if (nextSuffix > 999) {
+            nextSuffix = 0;
+            while (nextSuffix <= 999 && usedSuffixes[nextSuffix]) {
+                nextSuffix++;
+            }
+        }
+
+        if (nextSuffix > 999) {
+            return null;
+        }
+        return String.format("%s%03d", todayPrefix, nextSuffix);
     }
 
     private void refreshStudentTable() {
-        studentsTableModel.setRowCount(0);
-        List<Student> students = studentStore.getStudents();
-        for (Student student : students) {
-            studentsTableModel.addRow(new Object[]{
+        try {
+            studentsTableModel.setRowCount(0);
+            List<Student> students = studentDAO.getStudents();
+            for (Student student : students) {
+                studentsTableModel.addRow(new Object[]{
                     student.getStudentNumber(),
                     student.getFirstName(),
                     student.getLastName(),
@@ -658,57 +682,79 @@ public class MainFrame extends JFrame {
                     student.getPhoneNumber(),
                     student.getProgram(),
                     ""
-            });
+                });
+            }
+            studentsViewLayout.show(studentsContentPanel, students.isEmpty() ? "EMPTY" : "TABLE");
+            studentsTable.repaint();
+        } catch (DatabaseException exception) {
+            showDatabaseError(exception);
         }
-        studentsTable.repaint();
     }
 
     private void handleUpdateStudent(int rowIndex) {
-        List<Student> students = studentStore.getStudents();
-        if (rowIndex < 0 || rowIndex >= students.size()) {
-            return;
-        }
+        try {
+            List<Student> students = studentDAO.getStudents();
+            if (rowIndex < 0 || rowIndex >= students.size()) {
+                return;
+            }
 
-        Student student = students.get(rowIndex);
-        editingStudentIndex = rowIndex;
-        firstNameField.setText(student.getFirstName());
-        lastNameField.setText(student.getLastName());
-        genderCombo.setSelectedItem(student.getGender());
-        emailField.setText(student.getEmail());
-        phoneField.setText(student.getPhoneNumber());
-        programCombo.setSelectedItem(student.getProgram());
-        saveButton.setText("Save Changes");
-        statusLabel.setText("Editing student " + student.getStudentNumber());
-        statusLabel.setForeground(new Color(22, 119, 22));
-        tabbedPane.setSelectedIndex(1);
+            Student student = students.get(rowIndex);
+            editingStudentIndex = rowIndex;
+            firstNameField.setText(student.getFirstName());
+            lastNameField.setText(student.getLastName());
+            genderCombo.setSelectedItem(student.getGender());
+            emailField.setText(student.getEmail());
+            phoneField.setText(student.getPhoneNumber());
+            programCombo.setSelectedItem(student.getProgram());
+            saveButton.setText("Save Changes");
+            statusLabel.setText("Editing student " + student.getStudentNumber());
+            statusLabel.setForeground(new Color(22, 119, 22));
+            tabbedPane.setSelectedIndex(1);
+        } catch (DatabaseException exception) {
+            showDatabaseError(exception);
+        }
     }
 
     private void handleDeleteStudent(int rowIndex) {
-        List<Student> students = studentStore.getStudents();
-        if (rowIndex < 0 || rowIndex >= students.size()) {
-            return;
-        }
-
-        int option = JOptionPane.showConfirmDialog(this,
-                "Delete this student record?",
-                "Delete Student",
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.WARNING_MESSAGE);
-
-        if (option == JOptionPane.YES_OPTION) {
-            studentStore.deleteStudent(rowIndex);
-            if (editingStudentIndex == rowIndex) {
-                editingStudentIndex = -1;
-            } else if (editingStudentIndex > rowIndex) {
-                editingStudentIndex--;
+        try {
+            List<Student> students = studentDAO.getStudents();
+            if (rowIndex < 0 || rowIndex >= students.size()) {
+                return;
             }
-            refreshStudentTable();
-            statusLabel.setText("Student deleted successfully.");
-            statusLabel.setForeground(new Color(22, 119, 22));
+
+            int option = JOptionPane.showConfirmDialog(this,
+                    "Delete this student record?",
+                    "Delete Student",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE);
+
+            if (option == JOptionPane.YES_OPTION) {
+                studentDAO.deleteStudent(students.get(rowIndex).getStudentNumber());
+                if (editingStudentIndex == rowIndex) {
+                    editingStudentIndex = -1;
+                } else if (editingStudentIndex > rowIndex) {
+                    editingStudentIndex--;
+                }
+                refreshStudentTable();
+                statusLabel.setText("Student deleted successfully.");
+                statusLabel.setForeground(new Color(22, 119, 22));
+            }
+        } catch (DatabaseException exception) {
+            showDatabaseError(exception);
         }
     }
 
+    private void showDatabaseError(Exception exception) {
+        statusLabel.setText("Database operation failed.");
+        statusLabel.setForeground(Color.RED);
+        JOptionPane.showMessageDialog(this,
+                exception.getMessage() + "\nCheck that MySQL is running and the database settings are correct.",
+                "Database Error",
+                JOptionPane.ERROR_MESSAGE);
+    }
+
     private class ActionsCell extends AbstractCellEditor implements TableCellRenderer, TableCellEditor {
+
         private final JPanel panel = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 0));
         private final JButton updateButton = new JButton("Update");
         private final JButton deleteButton = new JButton("Delete");
