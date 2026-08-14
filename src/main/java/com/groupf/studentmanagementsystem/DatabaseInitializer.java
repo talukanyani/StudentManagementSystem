@@ -47,8 +47,8 @@ public final class DatabaseInitializer {
 
             statement.executeUpdate("""
                     INSERT IGNORE INTO admins (staff_number, first_name, last_name, password)
-                    VALUES ('26072101', 'Vhahangwele', 'Tshipuke', 'p@ss1'),
-                           ('26072102', 'Tshifhiwa', 'Nyadzanga', 'p@ss2')
+                    VALUES ('26072901', 'Vhahangwele', 'Tshipuke', 'p@ss1'),
+                           ('26072902', 'Tshifhiwa', 'Nyadzanga', 'p@ss2')
                     """);
 
             statement.executeUpdate("""
